@@ -1,39 +1,31 @@
 /****************************************************************************
 **
-** Copyright (C) 2011 Nokia Corporation and/or its subsidiary(-ies).
-** All rights reserved.
-** Contact: Nokia Corporation (qt-info@nokia.com)
+** Copyright (C) 2014 Digia Plc and/or its subsidiary(-ies).
+** Contact: http://www.qt-project.org/legal
 **
 ** This file is part of the plugins of the Qt Toolkit.
 **
-** $QT_BEGIN_LICENSE:LGPL$
+** $QT_BEGIN_LICENSE:LGPL21$
+** Commercial License Usage
+** Licensees holding valid commercial Qt licenses may use this file in
+** accordance with the commercial license agreement provided with the
+** Software or, alternatively, in accordance with the terms contained in
+** a written agreement between you and Digia. For licensing terms and
+** conditions see http://qt.digia.com/licensing. For further information
+** use the contact form at http://qt.digia.com/contact-us.
+**
 ** GNU Lesser General Public License Usage
-** This file may be used under the terms of the GNU Lesser General Public
-** License version 2.1 as published by the Free Software Foundation and
-** appearing in the file LICENSE.LGPL included in the packaging of this
-** file. Please review the following information to ensure the GNU Lesser
-** General Public License version 2.1 requirements will be met:
+** Alternatively, this file may be used under the terms of the GNU Lesser
+** General Public License version 2.1 or version 3 as published by the Free
+** Software Foundation and appearing in the file LICENSE.LGPLv21 and
+** LICENSE.LGPLv3 included in the packaging of this file. Please review the
+** following information to ensure the GNU Lesser General Public License
+** requirements will be met: https://www.gnu.org/licenses/lgpl.html and
 ** http://www.gnu.org/licenses/old-licenses/lgpl-2.1.html.
 **
-** In addition, as a special exception, Nokia gives you certain additional
-** rights. These rights are described in the Nokia Qt LGPL Exception
+** In addition, as a special exception, Digia gives you certain additional
+** rights. These rights are described in the Digia Qt LGPL Exception
 ** version 1.1, included in the file LGPL_EXCEPTION.txt in this package.
-**
-** GNU General Public License Usage
-** Alternatively, this file may be used under the terms of the GNU General
-** Public License version 3.0 as published by the Free Software Foundation
-** and appearing in the file LICENSE.GPL included in the packaging of this
-** file. Please review the following information to ensure the GNU General
-** Public License version 3.0 requirements will be met:
-** http://www.gnu.org/copyleft/gpl.html.
-**
-** Other Usage
-** Alternatively, this file may be used in accordance with the terms and
-** conditions contained in a signed written agreement between you and Nokia.
-**
-**
-**
-**
 **
 ** $QT_END_LICENSE$
 **
@@ -42,7 +34,10 @@
 #include "phantomintegration.h"
 #include "phantombackingstore.h"
 
-#include <private/qpixmap_raster_p.h>
+#include <QtGui/private/qpixmap_raster_p.h>
+#include <qpa/qplatformwindow.h>
+#include <qpa/qplatformfontdatabase.h>
+#include <qpa/qplatformnativeinterface.h>
 
 #if defined(Q_OS_MAC)
 # include <QtPlatformSupport/private/qcoretextfontdatabase_p.h>
@@ -52,30 +47,40 @@
 
 #include <QtPlatformSupport/private/qgenericunixeventdispatcher_p.h>
 
-PhantomIntegration::PhantomIntegration()
-{
-    PhantomScreen *mPrimaryScreen = new PhantomScreen();
+QT_BEGIN_NAMESPACE
 
+PhantomIntegration::PhantomIntegration()
+#if defined(Q_OS_MAC)
+    : m_fontDb(new QCoreTextFontDatabase),
+#else
+    : m_fontDb(new QGenericUnixFontDatabase)
+#endif
+{
+    m_primaryScreen = new PhantomScreen();
+}
+
+PhantomIntegration::~PhantomIntegration()
+{
+    delete m_primaryScreen;
+}
+
+void PhantomIntegration::initialize()
+{
     // Simulate typical desktop screen
     int width = 1024;
     int height = 768;
     int dpi = 72;
     qreal physicalWidth = width * 25.4 / dpi;
     qreal physicalHeight = height * 25.4 / dpi;
-    mPrimaryScreen->mGeometry = QRect(0, 0, width, height);
-    mPrimaryScreen->mPhysicalSize = QSizeF(physicalWidth, physicalHeight);
+    m_primaryScreen->mGeometry = QRect(0, 0, width, height);
+    m_primaryScreen->mPhysicalSize = QSizeF(physicalWidth, physicalHeight);
 
-    mPrimaryScreen->mDepth = 32;
-    mPrimaryScreen->mFormat = QImage::Format_ARGB32_Premultiplied;
+    m_primaryScreen->mDepth = 32;
+    m_primaryScreen->mFormat = QImage::Format_ARGB32_Premultiplied;
 
-    screenAdded(mPrimaryScreen);
+    screenAdded(m_primaryScreen);
 
-    m_phantomPlatformNativeInterface = new PhantomPlatformNativeInterface();
-}
-
-PhantomIntegration::~PhantomIntegration()
-{
-    delete m_phantomPlatformNativeInterface;
+    m_nativeInterface.reset(new QPlatformNativeInterface);
 }
 
 bool PhantomIntegration::hasCapability(QPlatformIntegration::Capability cap) const
@@ -98,15 +103,7 @@ QPlatformBackingStore* PhantomIntegration::createPlatformBackingStore(QWindow* w
 
 QPlatformFontDatabase *PhantomIntegration::fontDatabase() const
 {
-    static QPlatformFontDatabase *db = 0;
-    if (!db) {
-#if defined(Q_OS_MAC)
-        db = new QCoreTextFontDatabase();
-#else
-        db = new QGenericUnixFontDatabase();
-#endif
-    }
-    return db;
+    return m_fontDb.data();
 }
 
 QAbstractEventDispatcher *PhantomIntegration::createEventDispatcher() const
@@ -116,5 +113,7 @@ QAbstractEventDispatcher *PhantomIntegration::createEventDispatcher() const
 
 QPlatformNativeInterface *PhantomIntegration::nativeInterface() const
 {
-    return m_phantomPlatformNativeInterface;
+    return m_nativeInterface.data();
 }
+
+QT_END_NAMESPACE
